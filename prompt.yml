@@ -27,7 +27,7 @@ prompts:
     input:
       - "Go source file"
     output:
-      - "Go unit test file with basic coverage"
+      - "Go unit test file covering exported functions, methods, and basic error cases"
 
   - name: "doc_generator"
     description: "Generate markdown documentation for Go code."
