@@ -25,6 +25,7 @@ prompts:
     output: "Markdown-formatted documentation"
 
 metadata:
+  schema: "com.fortishield.prompts/1.0"
   author: "FortiShield"
   created: "2025-08-31"
   usage: "Customize these prompts for your automation, Copilot, or workflow needs."
