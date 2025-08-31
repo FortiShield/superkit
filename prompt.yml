@@ -1,7 +1,7 @@
 # prompt.yml
 # This file contains prompt templates and configuration for automation or AI-powered tasks.
 
-version: "1.0"
+version: 1.0.0
 
 prompts:
   - name: "feature_suggestion"
