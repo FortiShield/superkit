@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Prompt configuration schema",
+  "type": "object",
+  "required": ["version", "metadata", "templates"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Configuration version (semver)"
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "schema": { "type": "string" },
+        "author": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "templates": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["description", "prompt"],
+        "properties": {
+          "description": { "type": "string" },
+          "prompt": { "type": "string" },
+          "input_schema": { "type": ["object", "null"] },
+          "output_schema": { "type": ["object", "null"] },
+          "defaults": {
+            "type": "object",
+            "properties": {
+              "model": { "type": "string" },
+              "temperature": { "type": "number" },
+              "max_tokens": { "type": "integer" }
+            },
+            "additionalProperties": false
+          },
+          "examples": {
+            "type": "array",
+            "items": { "type": "object" }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
