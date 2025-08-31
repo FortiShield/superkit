@@ -45,4 +45,15 @@
     }
   },
   "additionalProperties": false
+}          },
+          "examples": {
+            "type": "array",
+            "items": { "type": "object" }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
 }
