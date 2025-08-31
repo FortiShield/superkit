@@ -1,43 +1,277 @@
 # prompt.yml
-# This file contains prompt templates and configuration for automation or AI-powered tasks.
+# Enhanced prompt templates and configuration for automation or AI-powered tasks.
+# Version history:
+#  - 1.0.0 initial
+#  - 1.1.0 enhanced prompts
+#  - 1.1.1 added required root key `messages`
+#  - 1.1.2 fix: ensure `messages` and `per_prompt` are arrays (validator: "array expected but object found")
 
-version: 1.0.0
+version: 1.1.2
+
+# REQUIRED ROOT KEY: messages (must be an array of message objects)
+messages:
+  - role: system
+    name: system_default
+    content: |
+      You are an assistant that follows .prompt.yml templates precisely.
+      - Respect the `template` field for each prompt as the primary instruction.
+      - Validate inputs against `schema_validation` rules when available.
+      - Do not emit secrets, tokens, or private keys.
+      - When producing changes, include minimal, focused diffs and file proposals.
+  - role: user
+    name: user_defaults
+    content: |
+      Provide the inputs described in the prompt's `input` schema. If any required input is missing, ask for it.
+  - role: assistant
+    name: assistant_defaults
+    content: |
+      When asked to produce files, respond with the file block format and include only the requested files. For changelogs or release notes, produce consumer-ready Markdown.
+
+# Optional: per-prompt message templates as an array (each item targets a prompt name)
+per_prompt:
+  - prompt: feature_suggestion
+    messages:
+      - role: system
+        content: "You are a product-focused engineer suggesting high-value features."
+      - role: user
+        content: "Analyze repository context and README; propose prioritized feature ideas."
+  - prompt: code_review
+    messages:
+      - role: system
+        content: "You are a senior engineer performing code reviews focused on correctness, security, and maintainability."
+      - role: user
+        content: "Review the given source files and return actionable issues with locations and suggested patches."
+  - prompt: test_generator
+    messages:
+      - role: system
+        content: "You are a Go testing expert who writes clear, table-driven unit tests and uses interfaces to mock external dependencies."
+      - role: user
+        content: "Generate a _test.go file for the provided Go source file covering exported behavior and common edge cases."
 
 prompts:
   - name: "feature_suggestion"
-    description: "Suggest new features based on current repository code and documentation."
+    description: "Suggest high-value, actionable features based on repository code, docs, and usage patterns."
     input:
-      - "Repository context"
-      - "README"
-      - "Code structure"
+      - name: "repository_context"
+        type: "repo"
+        description: "Full repository tree and recent commits"
+      - name: "readme"
+        type: "file"
+        description: "README or project overview"
+      - name: "code_structure"
+        type: "path"
+        description: "High-level module and package layout"
+      - name: "goals"
+        type: "string"
+        optional: true
+        description: "Business or product goals to prioritize suggestions"
     output:
-      - "List of actionable feature ideas"
+      - "Prioritized list of feature ideas (title, summary, rationale, rough estimate, potential risks)"
+    options:
+      priority_weights:
+        maintainability: 0.3
+        user_value: 0.5
+        effort: 0.2
+    template: |
+      Analyze the repository context, README, and code structure. Produce 5-10 actionable feature ideas prioritized by user value and effort. For each idea include:
+      - title
+      - one-sentence summary
+      - why it helps (rationale)
+      - rough effort estimate (S/M/L)
+      - suggested first pull request / implementation steps
+    examples:
+      - input: "small CLI tool with no tests, single author"
+        output: "Add integration tests, add --verbose flag, add CI linting"
 
   - name: "code_review"
-    description: "Review code and provide improvement suggestions."
+    description: "Review code and provide focused improvement suggestions and patch-level guidance."
     input:
-      - "Source code files"
+      - name: "source_files"
+        type: "paths"
+        description: "List of source files or a diff"
     output:
       - "Summary of code quality"
-      - "Best practices"
-      - "Refactoring ideas"
+      - "Best practices and security issues"
+      - "Refactoring ideas and sample code snippets"
+    options:
+      depth: "shallow|deep"
+      include_tests: true
+    template: |
+      Provide a code review for the given files. Highlight:
+      - High priority bugs or security fixes
+      - Readability and style issues
+      - Performance hotspots
+      - Tests missing or flakey
+      For each item include: location (file:line), severity, suggested change, and an optional one-line patch.
 
   - name: "test_generator"
-    description: "Generate unit test templates for a given Go file."
+    description: "Generate Go unit test templates for a given Go file."
     input:
-      - "Go source file"
+      - name: "go_source_file"
+        type: "file"
+        description: "Single Go source file path or contents"
+      - name: "coverage_level"
+        type: "string"
+        enum: ["basic", "recommended", "high"]
+        default: "recommended"
     output:
-      - "Go unit test file covering exported functions, methods, and basic error cases"
+      - "Go unit test file covering exported functions, methods, and common error cases"
+    options:
+      table_driven: true
+      use_mocks: true
+    template: |
+      Generate a *_test.go file that:
+      - Tests all exported functions and methods
+      - Includes table-driven tests where appropriate
+      - Mocks external dependencies if present (use interfaces)
+      - Covers common error and edge cases
+      - Uses testing best practices (parallel tests, clear names)
+    examples:
+      - input: "mathutils.go with Add, Subtract exported"
+        output: "mathutils_test.go with table-driven tests for Add and Subtract"
 
   - name: "doc_generator"
-    description: "Generate markdown documentation for Go code."
+    description: "Generate Markdown documentation for Go packages, commands, or modules."
     input:
-      - "Go source file"
+      - name: "go_source_file"
+        type: "file"
+        description: "File or package path"
     output:
-      - "Markdown-formatted documentation"
+      - "Markdown-formatted documentation with usage, examples, and API reference"
+    template: |
+      Produce a README-style Markdown file containing:
+      - Short description
+      - Installation / build instructions
+      - Examples of common usage
+      - API reference for exported types/functions (signature + short description)
+      - Notes on behavior, edge cases, and errors
+    examples:
+      - input: "cmd/server/main.go"
+        output: "README.md with example startup, env vars, and how to run locally"
+
+  - name: "ci_workflow_generator"
+    description: "Create GitHub Actions CI workflow templates tuned for the repository stack."
+    input:
+      - name: "repo_stack"
+        type: "string"
+        description: "Languages, frameworks, and target OS"
+      - name: "test_commands"
+        type: "string"
+        optional: true
+    output:
+      - "YAML GitHub Actions workflow file(s) with jobs for build, test, lint, and release"
+    template: |
+      Generate a GitHub Actions workflow that:
+      - Runs on push and PR for main branches
+      - Caches dependencies
+      - Splits lint, test, and build into separate jobs
+      - Optionally publishes artifacts or releases
+
+  - name: "issue_triage"
+    description: "Classify and propose labels, severity, and next steps for new issues."
+    input:
+      - name: "issue_title"
+        type: "string"
+      - name: "issue_body"
+        type: "string"
+    output:
+      - "Suggested labels, severity, reproducibility steps, and suggested assignee"
+    template: |
+      Analyze the issue and output:
+      - labels (bug/enhancement/docs/ci/security/etc.)
+      - severity (low/medium/high/critical)
+      - minimal reproduction steps (if missing, ask for them)
+      - suggested next action (assign, request more info, close as duplicate)
+
+  - name: "changelog_generator"
+    description: "Generate changelog entries from commits or PR descriptions following Conventional Commits."
+    input:
+      - name: "commits_or_prs"
+        type: "list"
+    output:
+      - "CHANGELOG.md fragment grouped by type (Added, Changed, Fixed, Security)"
+    template: |
+      Convert commits or PR titles/descriptions into a structured changelog. Group entries and include PR/commit references.
+
+  - name: "release_notes"
+    description: "Produce user-facing release notes for a set of merged PRs."
+    input:
+      - name: "merged_prs"
+        type: "list"
+    output:
+      - "Release notes with highlights, breaking changes, and upgrade guidance"
+    template: |
+      Summarize merged PRs into release notes targeted to end users and maintainers. Highlight breaking changes and migration steps.
+
+  - name: "security_scan_recommendations"
+    description: "Analyze repo for common security issues and recommend mitigations."
+    input:
+      - name: "repository"
+        type: "repo"
+    output:
+      - "List of found issues, severity, and suggested fixes or tools to run"
+    template: |
+      Look for:
+      - Secrets in history
+      - Unsafe dependency versions
+      - Insecure default configs
+      - Missing security tests
+      Provide prioritized remediation steps and suggested GitHub Actions or tools.
+
+  - name: "dependency_update"
+    description: "Propose dependency updates (Go modules) and generate a PR description."
+    input:
+      - name: "go_mod_files"
+        type: "paths"
+    output:
+      - "List of upgrades (major/minor/patch), risk assessment, and PR template"
+    template: |
+      Detect out-of-date modules, suggest safe upgrade ranges, and provide a draft PR body describing changes and test plan.
+
+  - name: "contributing_generator"
+    description: "Create or update CONTRIBUTING.md with project-specific guidelines."
+    input:
+      - name: "project_policies"
+        type: "string"
+        optional: true
+    output:
+      - "CONTRIBUTING.md with commit message conventions, PR process, code style, and testing expectations"
+    template: |
+      Output a CONTRIBUTING.md tailored to the repository's language and workflows. Include examples for common tasks.
 
 metadata:
   schema: "com.fortishield.prompts/1.0"
   author: "FortiShield"
   created: "2025-08-31"
-  usage: "Customize these prompts for your automation, Copilot, or workflow needs."
+  updated: "2025-08-31"
+  license: "MIT"
+  contact: "https://github.com/FortiShield"
+  repository: "https://github.com/FortiShield/superkit"
+  usage: |
+    These prompts are designed to be consumed by automation tools, Copilot-like agents,
+    or CI workflows. Use the `template` field as the core instruction; `input` describes
+    the expected inputs and types. `options` can be used to tune behavior.
+
+automation:
+  default_runner: "github-actions"
+  workflows_dir: ".github/workflows"
+  branch_prefix: "automation/prompt-update/"
+  commit_message_template: "chore(prompt): update .prompt.yml to version {{version}}"
+
+best_practices:
+  - "Keep templates concise and focused: prefer single-responsibility prompts."
+  - "Use examples to anchor model behavior for deterministic outputs."
+  - "Pin prompt version in automation to avoid silent regressions."
+  - "Avoid including secrets or private tokens in inputs."
+
+examples:
+  - prompt: "test_generator"
+    example_input: "pkg/math/math.go"
+    example_output: "pkg/math/math_test.go with table-driven tests for exported functions"
+
+schema_validation:
+  enabled: true
+  rules:
+    - "All prompts must include name, description, input, and output."
+    - "Input types should be one of: repo, file, path, paths, string, list."
+    - "Templates should be plain text instructions (no embedded secrets)."
