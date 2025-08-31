@@ -93,6 +93,30 @@ prompts:
       - "Summary of code quality"
       - "Best practices and security issues"
       - "Refactoring ideas and sample code snippets"
+    output_format: "json"
+    json_schema: |
+      {
+        "type":"object",
+        "required":["items"],
+        "properties":{
+          "items":{
+            "type":"array",
+            "items":{
+              "type":"object",
+              "required":["file","line","severity","title","message"],
+              "properties":{
+                "file":{"type":"string"},
+                "line":{"type":"integer","minimum":1},
+                "endLine":{"type":"integer","minimum":1},
+                "severity":{"type":"string","enum":["critical","high","medium","low","nit"]},
+                "title":{"type":"string"},
+                "message":{"type":"string"},
+                "patch":{"type":"string","description":"unified diff with +/-"}
+              }
+            }
+          }
+        }
+      }
     options:
       depth: "shallow|deep"
       include_tests: true
@@ -102,8 +126,7 @@ prompts:
       - Readability and style issues
       - Performance hotspots
       - Tests missing or flakey
-      For each item include: location (file:line), severity, suggested change, and an optional one-line patch.
-
+      For each item include: location (file:line-range), severity, suggested change, and an optional unified diff patch in a code block.
   - name: "test_generator"
     description: "Generate Go unit test templates for a given Go file."
     input:
