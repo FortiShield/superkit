@@ -1,0 +1,30 @@
+# prompt.yml
+# This file contains prompt templates and configuration for automation or AI-powered tasks.
+
+version: "1.0"
+
+prompts:
+  - name: "feature_suggestion"
+    description: "Suggest new features based on current repository code and documentation."
+    input: "Repository context, README, code structure"
+    output: "List of actionable feature ideas"
+
+  - name: "code_review"
+    description: "Review code and provide improvement suggestions."
+    input: "Source code files"
+    output: "Summary of code quality, best practices, and refactoring ideas"
+
+  - name: "test_generator"
+    description: "Generate unit test templates for a given Go file."
+    input: "Go source file"
+    output: "Go unit test file with basic coverage"
+
+  - name: "doc_generator"
+    description: "Generate markdown documentation for Go code."
+    input: "Go source file"
+    output: "Markdown-formatted documentation"
+
+metadata:
+  author: "FortiShield"
+  created: "2025-08-31"
+  usage: "Customize these prompts for your automation, Copilot, or workflow needs."
