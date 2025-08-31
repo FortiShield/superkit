@@ -1,0 +1,33 @@
+name: Lint and validate prompts
+
+on:
+  pull_request:
+    paths:
+      - 'prompt.yml'
+      - 'prompts/**'
+      - '.github/workflows/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install ajv-cli and yamllint
+        run: |
+          npm install -g ajv-cli
+          sudo apt-get update && sudo apt-get install -y yamllint
+
+      - name: Lint YAML files
+        run: |
+          yamllint -f colored prompt.yml || true
+
+      - name: Validate prompt.yml against schema
+        run: |
+          # exit non-zero on validation failure
+          ajv validate -s prompt.schema.json -d prompt.yml --strict=false
