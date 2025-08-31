@@ -4,68 +4,105 @@ import (
 	"AABBCCDD/app/handlers"
 	"AABBCCDD/app/views/errors"
 	"AABBCCDD/plugins/auth"
+	"net/http"
+	"time"
+
 	"log/slog"
 
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+
 	"github.com/khulnasoft/superkit/kit"
 	"github.com/khulnasoft/superkit/kit/middleware"
-
-	chimiddleware "github.com/go-chi/chi/v5/middleware"
 )
 
-// Define your global middleware
+// InitializeMiddleware wires up global middleware for the application router.
+// Enhancements:
+// - Added RequestID and RealIP middleware for better observability.
+// - Replaced the single WithRequest middleware with WithRequestAndResponseHeaders
+//   so handlers can accumulate response headers in context.
+// - Added a final middleware that applies accumulated response headers and logs timing.
 func InitializeMiddleware(router *chi.Mux) {
+	// Standard Chi middleware
+	router.Use(chimiddleware.RequestID)
+	router.Use(chimiddleware.RealIP)
 	router.Use(chimiddleware.Logger)
 	router.Use(chimiddleware.Recoverer)
-	router.Use(middleware.WithRequest)
+
+	// App-level middleware from kit
+	router.Use(middleware.WithRequestAndResponseHeaders)
+
+	// Final middleware: apply any headers accumulated in context and log request timing.
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			// Serve the request
+			next.ServeHTTP(w, r)
+			// Apply headers that handlers might have added to the context
+			middleware.ApplyResponseHeaders(w, r.Context())
+
+			// Light-weight structured debug info
+			slog.Debug("request complete",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"remote", r.RemoteAddr,
+				"duration", time.Since(start))
+		})
+	})
 }
 
-// Define your routes in here
+// InitializeRoutes registers all application routes and authentication wiring.
+//
+// Improvements:
+// - Centralized authConfig creation.
+// - Added a simple /healthz endpoint.
+// - Used chi's Route/Group helpers with kit.WithAuthentication so intent is explicit.
 func InitializeRoutes(router *chi.Mux) {
-	// Authentication plugin
-	//
-	// By default the auth plugin is active, to disable the auth plugin
-	// you will need to pass your own handler in the `AuthFunc`` field
-	// of the `kit.AuthenticationConfig`.
-	//  authConfig := kit.AuthenticationConfig{
-	//      AuthFunc: YourAuthHandler,
-	//      RedirectURL: "/login",
-	//  }
+	// Initialize auth plugin routes (login, logout, etc).
 	auth.InitializeRoutes(router)
+
 	authConfig := kit.AuthenticationConfig{
 		AuthFunc:    auth.AuthenticateUser,
 		RedirectURL: "/login",
 	}
 
-	// Routes that "might" have an authenticated user
-	router.Group(func(app chi.Router) {
-		app.Use(kit.WithAuthentication(authConfig, false)) // strict set to false
-
-		// Routes
-		app.Get("/", kit.Handler(handlers.HandleLandingIndex))
+	// Public / optionally-authenticated routes (auth present if available)
+	router.Group(func(r chi.Router) {
+		r.Use(kit.WithAuthentication(authConfig, false)) // non-strict: auth may be present
+		r.Get("/", kit.Handler(handlers.HandleLandingIndex))
+		// health check
+		r.Get("/healthz", kit.Handler(func(k *kit.Kit) error {
+			// lightweight health endpoint used by load balancers and runtime checks
+			return k.JSON(http.StatusOK, map[string]string{"status": "ok"})
+		}))
 	})
 
-	// Authenticated routes
-	//
-	// Routes that "must" have an authenticated user or else they
-	// will be redirected to the configured redirectURL, set in the
-	// AuthenticationConfig.
-	router.Group(func(app chi.Router) {
-		app.Use(kit.WithAuthentication(authConfig, true)) // strict set to true
-
-		// Routes
-		// app.Get("/path", kit.Handler(myHandler.HandleIndex))
+	// Strictly authenticated routes
+	router.Group(func(r chi.Router) {
+		r.Use(kit.WithAuthentication(authConfig, true)) // strict: redirect to login when unauthenticated
+		// register authenticated routes here, e.g.:
+		// r.Get("/dashboard", kit.Handler(handlers.HandleDashboard))
 	})
 }
 
-// NotFoundHandler that will be called when the requested path could
-// not be found.
-func NotFoundHandler(kit *kit.Kit) error {
-	return kit.Render(errors.Error404())
+// NotFoundHandler is used when no route matches the request.
+func NotFoundHandler(k *kit.Kit) error {
+	// Ensure correct status code is returned to clients before rendering the view.
+	k.Response.WriteHeader(http.StatusNotFound)
+	return k.Render(errors.Error404())
 }
 
-// ErrorHandler that will be called on errors return from application handlers.
-func ErrorHandler(kit *kit.Kit, err error) {
-	slog.Error("internal server error", "err", err.Error(), "path", kit.Request.URL.Path)
-	kit.Render(errors.Error500())
+// ErrorHandler is the centralized error handler used by kit.Handler wrapper.
+func ErrorHandler(k *kit.Kit, err error) {
+	// Log with context for easier debugging in observability systems.
+	slog.Error("internal server error",
+		"err", err.Error(),
+		"method", k.Request.Method,
+		"path", k.Request.URL.Path,
+		"remote", k.Request.RemoteAddr,
+	)
+
+	// Render a friendly error page to the user.
+	k.Response.WriteHeader(http.StatusInternalServerError)
+	_ = k.Render(errors.Error500())
 }
